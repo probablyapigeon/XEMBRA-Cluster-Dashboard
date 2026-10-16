@@ -1,0 +1,40 @@
+Version 1.0 — 2026
+Copyright © 2026 probablyapigeon
+
+The XEMBRA Engine, all associated modules, narrative systems, state machines, documentation, and any derivative works created by the author (“Software”) are the exclusive property of probablyapigeon a.k.a kierstenlynd@gmail.com a.k.a Kiersten Lynd
+All rights are reserved unless explicitly granted in writing.
+
+You may:
+Install and run the Software for personal, private use.
+View, study, and modify the Software locally for personal experimentation.
+Generate outputs using the Software for personal creative or research purposes.
+No other rights are granted.
+
+You may not, under any circumstances:
+3.1 Redistribution
+Redistribute, publish, upload, mirror, or share the Software or any portion of its source code.
+Include the Software in any public or private repository without explicit written permission.
+3.2 Commercial Use
+Use the Software or its outputs for any commercial, corporate, or revenue‑generating purpose.
+Integrate the Software into any product, service, or system intended for sale or monetization
+3.3 AI Training
+Use the Software, its code, or its outputs to train, fine‑tune, evaluate, or benchmark any machine learning model, AI system, LLM, or dataset.
+Provide the Software or its outputs to any entity for the purpose of model training or dataset creation.
+3.4 Derivative Agents
+Create or distribute autonomous agents, AI systems, or computational entities derived from or based on the Software.
+Use the Software as a foundation for any agent intended to mimic, replicate, or extend XEMBRA.
+3.5 Reverse Distribution
+Use the Software to generate outputs intended to reconstruct, approximate, or leak the Software’s internal logic, architecture, or code.
+4. Non‑Transferability
+This license is personal, non‑transferable, and non‑assignable.
+No sublicensing is permitted.
+5. Termination
+Any violation of this license immediately terminates all rights granted herein.
+Upon termination, you must delete all copies of the Software in your possession.
+6. No Warranty
+The Software is provided “AS IS,” without warranty of any kind, express or implied.
+The author is not liable for any damages arising from use or inability to use the Software.
+7. Permission Requests
+To request redistribution, collaboration, or commercial licensing rights, contact:
+probablyapigeon
+(You may add an email or GitHub link here if desired.)
