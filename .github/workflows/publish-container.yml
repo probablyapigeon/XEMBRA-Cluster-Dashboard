@@ -1,0 +1,56 @@
+name: Publish container
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-container-main
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/probablyapigeon/xembra-cluster-dashboard
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build Linux image
+        run: docker build --tag xembra-publish-check .
+      - name: Verify controller and recovery
+        run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_cluster_control.py -v
+      - name: Verify real evolution persistence
+        run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_evolution_state.py -v
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish and verify pull
+        run: |
+          docker tag xembra-publish-check "$IMAGE:latest"
+          docker tag xembra-publish-check "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          docker pull "$IMAGE:latest"
+          echo "### Published container" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`docker pull $IMAGE:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect "$IMAGE:latest" --format '{{join .RepoDigests "\n"}}' >> "$GITHUB_STEP_SUMMARY"
+      - name: Check anonymous pull access
+        run: |
+          anonymous_config=$(mktemp -d)
+          if docker --config "$anonymous_config" manifest inspect "$IMAGE:latest" >/dev/null 2>&1; then
+            echo "Anonymous pull access verified." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Image is published but requires authentication. Set package visibility to Public for anonymous docker pull."
+            echo "Package visibility must be set to Public for anonymous pulls." >> "$GITHUB_STEP_SUMMARY"
+          fi

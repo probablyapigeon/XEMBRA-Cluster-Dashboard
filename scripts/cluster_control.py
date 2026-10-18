@@ -3,7 +3,6 @@ import argparse
 import collections
 import contextlib
 import json
-import msvcrt
 import os
 from pathlib import Path
 import secrets
@@ -16,6 +15,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 import logging
+import signal
 
 ROOT = Path(os.environ.get('XEMBRA_CLUSTER_ROOT', Path(__file__).resolve().parents[1]))
 STATE = Path(os.environ.get('XEMBRA_CONTROL_STATE', ROOT / 'logs' / 'cluster'))
@@ -23,6 +23,10 @@ STATE.mkdir(parents=True, exist_ok=True)
 DB = STATE / 'control.db'
 SCRIPT = Path(__file__).resolve()
 PORT = int(os.environ.get('XEMBRA_DASHBOARD_PORT', '8765'))
+BIND = os.environ.get('XEMBRA_DASHBOARD_BIND', '127.0.0.1')
+ALLOWED_HOSTS = set(os.environ.get('XEMBRA_ALLOWED_HOSTS',
+    f'127.0.0.1:{PORT},localhost:{PORT}').split(','))
+SHUTDOWN = threading.Event()
 
 
 @contextlib.contextmanager
@@ -80,7 +84,12 @@ def lock(name):
         handle.write(b'0'); handle.flush()
     handle.seek(0)
     try:
-        msvcrt.locking(handle.fileno(),msvcrt.LK_NBLCK,1)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(handle.fileno(),msvcrt.LK_NBLCK,1)
+        else:
+            import fcntl
+            fcntl.flock(handle,fcntl.LOCK_EX | fcntl.LOCK_NB)
         return handle
     except OSError:
         handle.close()
@@ -96,11 +105,11 @@ def alive(name):
 
 
 def spawn(args, output=None, detached=False):
-    flags = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-             if detached else subprocess.CREATE_NO_WINDOW)
+    flags = ((subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+             if detached else subprocess.CREATE_NO_WINDOW) if os.name == 'nt' else 0)
     return subprocess.Popen([sys.executable,str(SCRIPT),*map(str,args)],cwd=ROOT,
         stdin=subprocess.DEVNULL,stdout=output or subprocess.DEVNULL,
-        stderr=subprocess.STDOUT,creationflags=flags)
+        stderr=subprocess.STDOUT,creationflags=flags,start_new_session=detached and os.name!='nt')
 
 
 def snapshot():
@@ -164,7 +173,7 @@ def worker(job_id, slot):
         child = subprocess.Popen([sys.executable,'-u',str(folder / 'cluster_test.py')],cwd=folder,
             env=dict(os.environ,XEMBRA_DAEMON='1',PYTHONIOENCODING='utf-8'),
             stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-            text=True,encoding='utf-8',errors='replace',creationflags=subprocess.CREATE_NO_WINDOW)
+            text=True,encoding='utf-8',errors='replace',creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         def read():
             for line in child.stdout:
                 tail.append(line.rstrip()); logger.info(line.rstrip())
@@ -274,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(raw)
 
     def trusted(self):
-        return self.headers.get('Host') in [f'127.0.0.1:{PORT}',f'localhost:{PORT}']
+        return self.headers.get('Host') in ALLOWED_HOSTS
 
     def do_GET(self):
         if not self.trusted():
@@ -302,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
 def guardian():
     handle = lock('guardian')
     if not handle: raise SystemExit('Guardian already running')
-    server = ThreadingHTTPServer(('127.0.0.1',PORT),Handler)
+    server = ThreadingHTTPServer((BIND,PORT),Handler)
     server.daemon_threads = True
     server.token = secrets.token_urlsafe(32)
     thread = threading.Thread(target=server.serve_forever,daemon=True); thread.start()
@@ -312,7 +321,7 @@ def guardian():
     launched = 0
     was_killed = False
     try:
-        while not settings()['stop']:
+        while not SHUTDOWN.is_set() and not settings()['stop']:
             pulse('guardian')
             cfg = settings()
             if was_killed and not cfg['killed']:
@@ -341,7 +350,7 @@ def guardian():
                 pass
             time.sleep(.5)
     finally:
-        command('kill')
+        with database() as db: db.execute('UPDATE settings SET stop=1 WHERE id=1')
         if proc:
             try: proc.wait(timeout=18)
             except subprocess.TimeoutExpired: proc.terminate(); proc.wait(timeout=5)
@@ -355,7 +364,13 @@ def main():
     parser.add_argument('--interval',type=int,default=60)
     parser.add_argument('--max-workers',type=int,default=2)
     args = parser.parse_args(); init()
-    if args.command == 'guardian': guardian()
+    if args.command == 'guardian':
+        def shutdown(signum,frame):
+            SHUTDOWN.set()
+        signal.signal(signal.SIGTERM,shutdown)
+        signal.signal(signal.SIGINT,shutdown)
+        with database() as db: db.execute('UPDATE settings SET stop=0 WHERE id=1')
+        guardian()
     elif args.command == 'controller': controller()
     elif args.command == 'worker': worker(args.job,args.slot)
     elif args.command == 'status': print(json.dumps(snapshot(),indent=2))

@@ -42,7 +42,7 @@ def running():
 
 def preflight():
     result = subprocess.run([sys.executable, "-c",
-        "import importlib.util; names=['numpy','pandas','matplotlib','yfinance','transformers']; "
+        "import importlib.util; names=['numpy','pandas','matplotlib','yfinance']; "
         "missing=[n for n in names if importlib.util.find_spec(n) is None]; "
         "assert not missing, 'Missing dependencies: '+', '.join(missing)"],
         cwd=ROOT, capture_output=True, text=True, timeout=15)

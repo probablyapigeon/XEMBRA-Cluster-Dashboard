@@ -1,5 +1,20 @@
 # XEMBRA Cluster Dashboard
 
+**Container image:** `ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest`.
+Pull with `docker pull ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest`,
+then run `docker compose -f compose.pull.yaml up -d` from this repository.
+See [DOCKER.md](DOCKER.md) for package visibility and operating instructions.
+
+**Docker:** `docker compose up -d --build`, then open
+<http://127.0.0.1:8766>. See [DOCKER.md](DOCKER.md) for persistent storage,
+controls, and container tests.
+
+**Networked nodes:** see [NETWORK.md](NETWORK.md) for authenticated node agents,
+shared compression functions, persistent evolution state, majority-voted QT
+synchronization, a network mailbox, and replicated events. This new mode has a
+separate coordinator/dashboard at port 8770. It retains a single coordinator;
+automatic leader election and failover are not implemented.
+
 A local Windows dashboard for scheduled XEMBRA evolution runs, worker health,
 crash history, and daemon controls. The controller and dashboard use Python's
 standard library; the bundled evolution workload needs `requirements.txt`.
@@ -33,7 +48,8 @@ two independent evolution workers, with a batch check every 60 seconds.
 - Responsive browser dashboard with schedule and run controls.
 
 Each worker maintains its own SQLite data and generated Python functions.
-Workers do not share evolved functions or communicate across machines.
+The original local mode does not exchange functions or communicate across
+machines. Use the separate network mode above for those capabilities.
 
 ## Control commands
 

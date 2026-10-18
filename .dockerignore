@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!requirements.txt
+!*.py
+!scripts/
+!scripts/*.py
+!scripts/*.html
+!tests/
+!tests/test_cluster_control.py
+!tests/test_evolution_state.py

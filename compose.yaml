@@ -1,0 +1,28 @@
+name: xembra-dashboard
+services:
+  cluster:
+    build: .
+    image: xembra-cluster-dashboard:local
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${XEMBRA_HOST_PORT:-8766}:8765"
+    environment:
+      XEMBRA_ALLOWED_HOSTS: "127.0.0.1:8765,localhost:8765,127.0.0.1:${XEMBRA_HOST_PORT:-8766},localhost:${XEMBRA_HOST_PORT:-8766}"
+    volumes:
+      - cluster-data:/data
+    stop_grace_period: 40s
+    cpus: 2.0
+    mem_limit: 2g
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+volumes:
+  cluster-data:

@@ -15,7 +15,14 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 import inspect
 
-from transformers import pipeline
+from shared_evolution import compression as portable_compression, validate as validate_compression, write_json
+
+
+def load_evolution_state():
+    if os.environ.get("XEMBRA_DAEMON") == "1" and os.path.exists("evolution_state.json"):
+        with open("evolution_state.json", encoding="utf-8") as stream:
+            return json.load(stream)
+    return {"generation": 0, "alpha": [1.0, 1.0], "qt": [0.5, 0.5]}
 
 # ============================================================
 # Ψ DATA STRUCTURE
@@ -212,6 +219,10 @@ class CognitiveSingularityEngine:
         self.recorder = TextPsiRecorder()
         self.kindergarten = SelfModifyingParrotKindergarten()
         self.qt_loop = SelfModifyingQTLoop()
+        previous = load_evolution_state()
+        self.qt_loop.alpha = np.array(previous["alpha"])
+        if "artifact" in previous:
+            self.kindergarten.compression_func = portable_compression(previous["artifact"])
         self.library = PsiLibrary()
         self.parrot_mods = 0
         self.qt_mods = 0
@@ -251,6 +262,11 @@ def run_cognitive_singularity():
     recorder = TextPsiRecorder()
     kindergarten = SelfModifyingParrotKindergarten()
     qt_loop = SelfModifyingQTLoop()
+    previous = load_evolution_state()
+    qt_loop.alpha = np.array(previous["alpha"])
+    state = np.array(previous["qt"])
+    artifact = previous.get("artifact", {"version": 1, "text_limit": 100, "sentiment": 0.0, "eeg_mean": 0.0, "eeg_std": 0.0})
+    kindergarten.compression_func = portable_compression(artifact)
     library = PsiLibrary()
 
     # Build cluster using the SAME evolving engine
@@ -283,17 +299,15 @@ def run_cognitive_singularity():
         print(f"Compressed Ψ: {compressed}")
 
         # QT update
-        state = qt_loop.adaptive_update_qt(np.array([0.5, 0.5]))
+        state = qt_loop.adaptive_update_qt(state)
         print(f"QT Analysis: {qt_analysis(state)}\n")
 
         # Modify compression engine
         if cycle == 2:
-            source = generate_dynamic_compression_source(state[0], state[1])
-            func_name = f"compression_v{time.time_ns()}"
-            rewrite_self(func_name, source)
-            new_func = xembra_generated.get(func_name)
-            if new_func:
-                kindergarten.compression_func = new_func
+            artifact = {"version": 1, "text_limit": 120, "sentiment": float(state[0]),
+                        "eeg_mean": float(state[0]), "eeg_std": abs(float(state[1]))}
+            validate_compression(artifact)
+            kindergarten.compression_func = portable_compression(artifact)
             parrot_mods += 1
 
         # Modify QT loop
@@ -315,6 +329,10 @@ def run_cognitive_singularity():
     print("\n📊 Visualizing QT loop trajectory...")
     if os.environ.get("XEMBRA_DAEMON") != "1":
         plot_qt_states(library, tape_id)
+    else:
+        previous.update({"generation": previous.get("generation", 0) + 1,
+                         "alpha": qt_loop.alpha.tolist(), "qt": state.tolist(), "artifact": artifact})
+        write_json("evolution_state.json", previous)
 
 def auto_restart():
     print("\n🔁 Auto‑Restart Evolution Loop engaged...")

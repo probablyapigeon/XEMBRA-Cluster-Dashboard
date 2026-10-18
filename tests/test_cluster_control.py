@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import signal
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,7 @@ class ControlTests(unittest.TestCase):
             try: self.proc.wait(timeout=22)
             except subprocess.TimeoutExpired:
                 self.proc.kill(); self.proc.wait(); self.fail('Controller did not stop')
+        self.wait_for(lambda:not self.control.alive('controller'),timeout=10)
         for key,value in self.previous.items():
             if value is None: os.environ.pop(key,None)
             else: os.environ[key]=value
@@ -123,13 +125,32 @@ class ControlTests(unittest.TestCase):
         first=self.wait_for(controller_pid)
         self.wait_for(lambda:any(p['name']=='worker-1' for p in self.control.snapshot()['pulses']))
         # This PID belongs to the just-created isolated test guardian's controller.
-        subprocess.run(['taskkill','/PID',str(first),'/F'],check=True,capture_output=True)
+        if os.name=='nt':
+            subprocess.run(['taskkill','/PID',str(first),'/F'],check=True,capture_output=True)
+        else:
+            os.kill(first,signal.SIGKILL)
         second=self.wait_for(lambda:controller_pid() if controller_pid()!=first else None,timeout=22)
         self.assertNotEqual(first,second)
         self.assertTrue(any(c['component']=='controller' for c in self.control.snapshot()['crashes']))
         job=self.control.snapshot()['jobs'][0]
         self.assertEqual(job['state'],'failed')
         self.assertIn('heartbeat lost',job['detail'])
+
+    @unittest.skipIf(os.name=='nt','POSIX SIGTERM shutdown is exercised inside Docker')
+    def test_guardian_restart_preserves_pause_and_kill_state(self):
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
+        self.env['XEMBRA_DASHBOARD_PORT']=str(port)
+        self.control.command('pause')
+        for killed in [0,1]:
+            if killed:self.control.command('kill')
+            for _ in range(2):
+                self.launch('guardian')
+                self.wait_for(lambda:self.control.alive('guardian'))
+                self.assertEqual(self.control.settings()['killed'],killed)
+                self.assertEqual(self.control.settings()['enabled'],0)
+                self.proc.terminate();self.proc.wait(timeout=10)
+                self.assertFalse(self.control.alive('guardian'))
 
 
 if __name__=='__main__': unittest.main()
