@@ -1,3 +1,4 @@
+param([switch]$ResumeAutomaticCircuit, [ValidateSet('learning','xc')][string]$Workload='learning')
 $ErrorActionPreference = 'Stop'
 $dockerJobRoot = Split-Path -Parent $PSScriptRoot
 $dockerJobDirectory = Join-Path $dockerJobRoot 'logs\docker-build'
@@ -12,7 +13,7 @@ $dockerJobResult = [ordered]@{
 $dockerJobResult | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dockerJobDirectory 'result.json') -Encoding UTF8
 $dockerJobExit = 0
 try {
-    & (Join-Path $PSScriptRoot 'docker_verify.ps1')
+    & (Join-Path $PSScriptRoot 'docker_verify.ps1') -ResumeAutomaticCircuit:$ResumeAutomaticCircuit -Workload $Workload
     $dockerJobResult.status = 'success'
 } catch {
     $dockerJobResult.status = 'failed'

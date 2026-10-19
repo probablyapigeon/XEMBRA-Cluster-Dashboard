@@ -1,5 +1,7 @@
+param([switch]$ResumeAutomaticCircuit, [ValidateSet('learning','xc')][string]$Workload='learning')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
+$env:XEMBRA_WORKLOAD = $Workload
 
 function Invoke-DockerChecked {
     param([string[]]$Arguments)
@@ -11,6 +13,8 @@ Invoke-DockerChecked -Arguments @('compose', 'config', '--quiet')
 Invoke-DockerChecked -Arguments @('compose', 'build')
 Invoke-DockerChecked -Arguments @('run', '--rm', '--init', 'xembra-cluster-dashboard:local', 'python', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_cluster_control.py', '-v')
 Invoke-DockerChecked -Arguments @('run', '--rm', '--init', 'xembra-cluster-dashboard:local', 'python', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_evolution_state.py', '-v')
+Invoke-DockerChecked -Arguments @('run', '--rm', '--init', 'xembra-cluster-dashboard:local', 'python', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_learned_compression.py', '-v')
+Invoke-DockerChecked -Arguments @('run', '--rm', '--init', 'xembra-cluster-dashboard:local', 'python', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_xc_worker.py', '-v')
 
 # Use an exclusively named temporary project/volume for destructive restart tests.
 $checkProject = 'xembra-check-' + [guid]::NewGuid().ToString('N').Substring(0,12)
@@ -54,5 +58,23 @@ try {
 Invoke-DockerChecked -Arguments @('compose','up','-d','--no-build')
 $dashboardPort = if ($env:XEMBRA_HOST_PORT) { $env:XEMBRA_HOST_PORT } else { '8766' }
 $checkUrl = "http://127.0.0.1:$dashboardPort/api/status"
-$null = Wait-ClusterState { param($s) $s.guardian_running }
+$deployedState = Wait-ClusterState { param($s) $s.guardian_running }
+if ($ResumeAutomaticCircuit -and $deployedState.workload -eq 'learning' -and $deployedState.settings.killed -eq 1) {
+    $lastSafetyEvent = $deployedState.messages | Where-Object { $_.kind -in @('kill','circuit_breaker') } | Sort-Object stamp -Descending | Select-Object -First 1
+    if ($lastSafetyEvent.kind -eq 'circuit_breaker' -and $lastSafetyEvent.sender -eq 'controller') {
+        Invoke-DockerChecked -Arguments @('compose','exec','-T','cluster','python','scripts/cluster_control.py','resume')
+        Write-Output 'Resumed learning after the previous legacy workload automatic circuit breaker.'
+        $deployedState = Wait-ClusterState { param($s) $s.settings.killed -eq 0 }
+    }
+}
+if ($deployedState.workload -eq 'learning' -and $deployedState.settings.killed -eq 0 -and $deployedState.settings.enabled -eq 1) {
+    $deployedState = Wait-ClusterState { param($s) @($s.learning).Count -gt 0 }
+    Write-Output 'Live held-out learning measurements:'
+    $deployedState.learning[0].report.test | ConvertTo-Json
+}
+if ($deployedState.workload -eq 'xc' -and $deployedState.settings.killed -eq 0 -and $deployedState.settings.enabled -eq 1) {
+    $deployedState = Wait-ClusterState { param($s) @($s.xc).Count -gt 0 }
+    Write-Output 'Live XC state and memory:'
+    $deployedState.xc[0].report | ConvertTo-Json -Depth 6
+}
 Write-Output "Docker dashboard running: http://127.0.0.1:$dashboardPort"

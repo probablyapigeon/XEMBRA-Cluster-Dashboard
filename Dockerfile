@@ -17,6 +17,9 @@ ENV PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     MPLCONFIGDIR=/tmp/matplotlib \
     XEMBRA_CONTROL_STATE=/data \
+    XEMBRA_WORKLOAD=learning \
+    OPENBLAS_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1 \
     XEMBRA_DASHBOARD_BIND=0.0.0.0 \
     XEMBRA_DASHBOARD_PORT=8765
 
@@ -32,6 +35,7 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 COPY --chown=xembra:xembra *.py ./
 COPY --chown=xembra:xembra scripts/ ./scripts/
 COPY --chown=xembra:xembra tests/ ./tests/
+COPY --chown=xembra:xembra xc/ ./xc/
 
 USER xembra
 EXPOSE 8765

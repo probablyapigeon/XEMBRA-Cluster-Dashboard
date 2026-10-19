@@ -27,6 +27,7 @@ BIND = os.environ.get('XEMBRA_DASHBOARD_BIND', '127.0.0.1')
 ALLOWED_HOSTS = set(os.environ.get('XEMBRA_ALLOWED_HOSTS',
     f'127.0.0.1:{PORT},localhost:{PORT}').split(','))
 SHUTDOWN = threading.Event()
+WORKLOAD = os.environ.get('XEMBRA_WORKLOAD','legacy')
 
 
 @contextlib.contextmanager
@@ -121,6 +122,22 @@ def snapshot():
         result['messages'] = [dict(r) for r in db.execute('SELECT * FROM messages ORDER BY id DESC LIMIT 30')]
         result['totals'] = dict(db.execute("SELECT count(*) jobs, sum(state='done') completed, sum(state='failed') failed FROM jobs").fetchone())
     result['now'] = time.time()
+    result['workload'] = WORKLOAD
+    result['learning'] = []
+    result['xc'] = []
+    for slot in range(1,5):
+        path = STATE / f'worker-{slot}' / 'learning_metrics.json'
+        try:
+            if path.stat().st_size <= 262144:
+                result['learning'].append({'worker':f'worker-{slot}','report':json.loads(path.read_text(encoding='utf-8'))})
+        except (OSError,ValueError):
+            pass
+        path = STATE / f'worker-{slot}' / 'xc_metrics.json'
+        try:
+            if path.stat().st_size <= 262144:
+                result['xc'].append({'worker':f'worker-{slot}','report':json.loads(path.read_text(encoding='utf-8'))})
+        except (OSError,ValueError):
+            pass
     return result
 
 
@@ -170,7 +187,10 @@ def worker(job_id, slot):
     child = None
     reason = ''
     try:
-        child = subprocess.Popen([sys.executable,'-u',str(folder / 'cluster_test.py')],cwd=folder,
+        workload_file = {'learning':'learning_worker.py','xc':'xc_worker.py','legacy':'cluster_test.py'}[WORKLOAD]
+        if WORKLOAD == 'xc':
+            shutil.copytree(ROOT / 'xc', folder / 'xc', dirs_exist_ok=True)
+        child = subprocess.Popen([sys.executable,'-u',str(folder / workload_file)],cwd=folder,
             env=dict(os.environ,XEMBRA_DAEMON='1',PYTHONIOENCODING='utf-8'),
             stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             text=True,encoding='utf-8',errors='replace',creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
@@ -364,6 +384,7 @@ def main():
     parser.add_argument('--interval',type=int,default=60)
     parser.add_argument('--max-workers',type=int,default=2)
     args = parser.parse_args(); init()
+    if WORKLOAD not in ['legacy','learning','xc']:parser.error('XEMBRA_WORKLOAD must be legacy, learning or xc')
     if args.command == 'guardian':
         def shutdown(signum,frame):
             SHUTDOWN.set()

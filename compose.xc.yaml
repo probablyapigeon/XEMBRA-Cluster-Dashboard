@@ -1,0 +1,5 @@
+# Local XC workload; combine with compose.yaml when building or starting.
+services:
+  cluster:
+    environment:
+      XEMBRA_WORKLOAD: xc

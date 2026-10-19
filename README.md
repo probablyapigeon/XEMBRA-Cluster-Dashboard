@@ -1,5 +1,10 @@
 # XEMBRA Cluster Dashboard
 
+**Measured neural learning:** the Docker workload now trains a 339-parameter
+network to choose lossless codecs. The dashboard reports held-out compression,
+accuracy, reconstruction checks, and learning curves. See [LEARNING.md](LEARNING.md)
+for measured results, limitations, and testing your own files.
+
 **Container image:** `ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest`.
 Pull with `docker pull ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest`,
 then run `docker compose -f compose.pull.yaml up -d` from this repository.

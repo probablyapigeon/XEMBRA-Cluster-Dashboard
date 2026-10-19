@@ -29,6 +29,10 @@ jobs:
         run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_cluster_control.py -v
       - name: Verify real evolution persistence
         run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_evolution_state.py -v
+      - name: Verify neural learning and lossless compression
+        run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_learned_compression.py -v
+      - name: Verify XC persistent state and memory
+        run: docker run --rm --init xembra-publish-check python -m unittest discover -s tests -p test_xc_worker.py -v
       - name: Sign in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:

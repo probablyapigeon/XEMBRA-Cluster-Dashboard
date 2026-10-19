@@ -21,8 +21,8 @@ class ControlTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.state = self.root / 'state'
-        self.env = dict(os.environ,XEMBRA_CLUSTER_ROOT=str(self.root),XEMBRA_CONTROL_STATE=str(self.state))
-        self.previous = {key:os.environ.get(key) for key in ['XEMBRA_CLUSTER_ROOT','XEMBRA_CONTROL_STATE']}
+        self.env = dict(os.environ,XEMBRA_CLUSTER_ROOT=str(self.root),XEMBRA_CONTROL_STATE=str(self.state),XEMBRA_WORKLOAD='legacy')
+        self.previous = {key:os.environ.get(key) for key in ['XEMBRA_CLUSTER_ROOT','XEMBRA_CONTROL_STATE','XEMBRA_WORKLOAD']}
         os.environ.update({key:self.env[key] for key in self.previous})
         spec = importlib.util.spec_from_file_location('control_test',SCRIPT)
         self.control = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.control)
@@ -73,15 +73,38 @@ class ControlTests(unittest.TestCase):
         for slot in [1,2]: self.assertEqual((self.state/f'worker-{slot}'/'result.txt').read_text(),'private')
         self.wait_for(lambda:all(m['consumed'] for m in self.control.snapshot()['messages'] if m['recipient']=='controller'))
 
+    def test_learning_workload_dispatches_and_exposes_metrics(self):
+        self.env['XEMBRA_WORKLOAD']='learning'
+        (self.root/'cluster_test.py').write_text("raise RuntimeError('legacy workload must not run')\n")
+        (self.root/'learning_worker.py').write_text("import json\nfrom pathlib import Path\nPath('learning_metrics.json').write_text(json.dumps({'generation':1,'test':{'compressed_bytes':42}}))\n")
+        self.launch()
+        self.wait_for(lambda:self.control.snapshot()['totals']['completed']==2)
+        reports=self.control.snapshot()['learning']
+        self.assertEqual(len(reports),2)
+        self.assertTrue(all(item['report']['test']['compressed_bytes']==42 for item in reports))
+
     def test_crash_recorded_and_circuit_breaker_latches(self):
         (self.root/'cluster_test.py').write_text("raise RuntimeError('deliberate crash')\n")
         self.control.command('pause')
         for _ in range(5): self.control.command('run')
         self.launch()
-        self.wait_for(lambda:self.control.settings()['killed']==1)
+        # Five process launches and durable SQLite writes can exceed 10s on Docker Desktop.
+        # The contract is five failures within five minutes, not a 10s startup deadline.
+        self.wait_for(lambda:self.control.settings()['killed']==1,timeout=30)
         snap=self.control.snapshot()
         self.assertGreaterEqual(len(snap['crashes']),5)
         self.assertIn('deliberate crash',snap['crashes'][0]['detail'])
+
+    def test_xc_dispatch_copies_program_and_exposes_reports(self):
+        self.env['XEMBRA_WORKLOAD']='xc'
+        (self.root/'xc').mkdir()
+        (self.root/'xc'/'mara_memory.xc').write_text('fixture')
+        (self.root/'xc_worker.py').write_text("import json\nfrom pathlib import Path\nassert Path('xc/mara_memory.xc').read_text()=='fixture'\nPath('xc_metrics.json').write_text(json.dumps({'events_total':8,'action':'HELP'}))\n")
+        self.launch()
+        self.wait_for(lambda:self.control.snapshot()['totals']['completed']==2)
+        reports=self.control.snapshot()['xc']
+        self.assertEqual(len(reports),2)
+        self.assertTrue(all(item['report']['events_total']==8 for item in reports))
 
     def test_dashboard_rejects_unauthenticated_controls(self):
         with socket.socket() as sock:

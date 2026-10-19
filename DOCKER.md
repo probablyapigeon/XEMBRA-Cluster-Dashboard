@@ -1,5 +1,9 @@
 # Run XEMBRA in Docker
 
+Local builds default to the measured neural codec-selection workload. See
+[LEARNING.md](LEARNING.md). A previously published GHCR image will not include
+new local changes until a new publishing workflow has completed.
+
 ## Published GHCR image
 
 The publishing workflow tests the Linux image before uploading `latest` and an
@@ -84,3 +88,53 @@ runs the real evolution workload twice to verify persistence.
 This image packages the local dashboard and worker supervisor. It does not
 implement the pending multi-coordinator consensus/failover or configure remote
 networking. Network scripts remain in the source checkout for separate use.
+
+## Run your XC program in the local container
+
+```powershell
+docker compose -f compose.yaml -f compose.xc.yaml up -d --build
+```
+
+Open http://127.0.0.1:8766 and find **XC program & persistent memory**.
+The override selects `XEMBRA_WORKLOAD=xc`. Use both compose files when recreating
+the XC container; ordinary `docker compose up` otherwise selects learning.
+Docker Desktop restarts preserve the current container configuration.
+
+Each scheduled worker executes eight scripted events from `xc/mara_memory.xc`,
+then saves its own `xc_checkpoint.json` and `xc_metrics.json` under
+`/data/worker-N/`. The next run resumes state, action, event counter and memory.
+The existing named volume preserves these files across container replacement.
+Source/hash mismatches fail instead of silently erasing an old checkpoint.
+Keep a backup and choose a new state volume before changing the program's
+source if its existing checkpoints must remain available.
+
+The XC runtime is the locally tested 0.3.0 foundation, copied unchanged as
+`xc_runtime.py`; provenance is recorded in `xc/PROVENANCE.json`. Its default
+Mara program retains up to 64 memories. The dashboard also compares a hypothetical
+next PlayerTalk response with only the last 16 memories; this comparison does
+not change the saved full checkpoint. Events and policy are handwritten demo
+rules, not neural training, real Minecraft observations or shared machine memory.
+
+Switch back to the compression selector:
+
+```powershell
+$env:XEMBRA_WORKLOAD = 'learning'
+docker compose up -d
+```
+
+The publishing workflow includes the XC runtime and runs its persistence tests.
+Kill/pause controls still apply to XC.
+
+## Share XC without cloning the repository
+
+With Docker running, pull and start a private local XC cluster:
+
+```powershell
+docker pull ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest
+docker run -d --name xembra-xc --init --restart unless-stopped -p 127.0.0.1:8766:8765 -e XEMBRA_WORKLOAD=xc -v xembra-xc-data:/data --memory 2g --cpus 2 --pids-limit 256 --security-opt no-new-privileges --cap-drop ALL ghcr.io/probablyapigeon/xembra-cluster-dashboard:latest
+```
+
+Open http://127.0.0.1:8766. The named volume keeps checkpoints after container
+replacement. This starts an independent cluster; it does not join another
+person's cluster or exchange their memories. For later starts of this same
+container use `docker start xembra-xc` instead of repeating `docker run`.

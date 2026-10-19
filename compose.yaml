@@ -8,6 +8,7 @@ services:
     ports:
       - "127.0.0.1:${XEMBRA_HOST_PORT:-8766}:8765"
     environment:
+      XEMBRA_WORKLOAD: "${XEMBRA_WORKLOAD:-learning}"
       XEMBRA_ALLOWED_HOSTS: "127.0.0.1:8765,localhost:8765,127.0.0.1:${XEMBRA_HOST_PORT:-8766},localhost:${XEMBRA_HOST_PORT:-8766}"
     volumes:
       - cluster-data:/data

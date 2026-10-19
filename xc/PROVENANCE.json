@@ -1,0 +1,8 @@
+{
+  "origin": "Local XEMBRA_FOUNDATION_v050_XC_MINECRAFT_BRIDGE_V040",
+  "runtime_original_path": "runtime/xc.py",
+  "runtime_packaged_path": "xc_runtime.py",
+  "runtime_sha256": "ca3cf2de7fe717de70407e59d13cdd5175031e7b4b65c0d7e41b52874f36b29e",
+  "program_original_path": "mara_memory.xc",
+  "note": "Runtime and program copied unchanged from the locally tested foundation. This is newer than the legacy interpreter in the xembra-xc GitHub bootstrap."
+}

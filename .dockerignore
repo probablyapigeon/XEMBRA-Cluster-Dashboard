@@ -8,3 +8,8 @@
 !tests/
 !tests/test_cluster_control.py
 !tests/test_evolution_state.py
+!tests/test_learned_compression.py
+!tests/test_xc_worker.py
+!xc/
+!xc/mara_memory.xc
+!xc/PROVENANCE.json
